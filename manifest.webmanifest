@@ -1,0 +1,14 @@
+{
+  "name": "Prospection Toiture",
+  "short_name": "Prospection",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F4F2EE",
+  "theme_color": "#1B1E23",
+  "lang": "fr",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
