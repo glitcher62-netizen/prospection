@@ -4,7 +4,7 @@
    - les fonds de carte : copie gardée en priorité (le secteur reste visible sans réseau)
    - adresses, bâtiments et sauvegarde en ligne : toujours le réseau
    Changer VERSION à chaque mise en ligne : l'appli propose alors « Mettre à jour ». */
-const VERSION = '2026-10-21.2';
+const VERSION = '2026-10-22.1';
 const SHELL = 'shell-' + VERSION;
 const TILES = 'tiles-v1';
 const MAX_TILES = 4000;

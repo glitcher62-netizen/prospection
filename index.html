@@ -314,6 +314,10 @@ nav.tabs button { position: relative; }
         <label class="check"><input type="checkbox" id="fsSkipEmpty">Sans les absents où je n’ai rien noté</label>
         <label class="check"><input type="checkbox" id="fsContactsOnly">Seulement les portes avec un nom ou un téléphone</label>
         <button class="btn primary" type="button" id="btnExportFiche">Exporter la fiche de suivi</button>
+        <details class="fold" id="fsMoveBox"><summary><span><span class="s-t">Changer le secteur de ces portes</span><span class="s-v" id="fsMoveInfo"></span></span></summary><div class="fold-body">
+          <div class="hint">Range toutes les portes de la fiche et de la période choisies dans un autre secteur (ex. : Taussat).</div>
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px"><input class="t" id="fsMoveName" list="fsMoveList" placeholder="Nom du secteur" autocomplete="off" style="min-width:0"><datalist id="fsMoveList"></datalist><button class="btn primary" type="button" id="btnMoveSec">Ranger</button></div>
+        </div></details>
         <div class="hint">Fichier Excel prêt à imprimer, mêmes colonnes que la feuille papier. Les observations reprennent le résultat, le ressenti, les étiquettes et ta note.</div>
       </div>
       <button class="btn" type="button" id="btnExport">Export complet (toutes les colonnes)</button>
@@ -1926,12 +1930,12 @@ function hasNoted(d) { // un absent compte s'il y a quelque chose de vu ou d'éc
   return !!((d.roof || []).length || (d.tags || []).length || d.heat || String(d.note || '').trim() || (d.photos || []).length || hasContact(d));
 }
 (function () { var c = $('fsSkipEmpty'); c.checked = !!S.settings.skipEmpty; c.addEventListener('change', function () { S.settings.skipEmpty = c.checked; persist(); }); })();
-$('btnExportFiche').addEventListener('click', function () {
+function selDoors(withChecks) {
   var period = $('fsPeriod').value, now = new Date(), from = null, day = period.indexOf('d:') === 0 ? period.slice(2) : null, tour = period.indexOf('t:') === 0 ? period.slice(2).split('-').map(Number) : null;
   if (period === 'today') from = ymd(now);
   else if (period === 'week' || period === 'month') { var f = new Date(); f.setDate(f.getDate() - (period === 'week' ? 6 : 29)); from = ymd(f); }
-  var skipEmpty = $('fsSkipEmpty').checked, onlyContacts = $('fsContactsOnly').checked, pick = $('fsPick').value || ('s:' + curSecteur());
-  var list = S.doors.filter(function (d) {
+  var skipEmpty = withChecks && $('fsSkipEmpty').checked, onlyContacts = withChecks && $('fsContactsOnly').checked, pick = $('fsPick').value || ('s:' + curSecteur());
+  return S.doors.filter(function (d) {
     if (pick !== 'all' && secOf(d) !== pick.slice(2)) return false;
     if (from && ymd(new Date(d.createdAt)) < from) return false;
     if (day && ymd(new Date(d.createdAt)) !== day) return false;
@@ -1939,7 +1943,27 @@ $('btnExportFiche').addEventListener('click', function () {
     if (onlyContacts && !hasContact(d)) return false;
     if (skipEmpty && d.status === 'absent' && !hasNoted(d)) return false;
     return true;
-  }).slice().sort(function (a, b) { return String(a.createdAt).localeCompare(String(b.createdAt)); });
+  });
+}
+function renderMoveInfo() {
+  var n = selDoors(false).length; $('fsMoveInfo').textContent = n + ' porte' + (n > 1 ? 's' : '');
+  $('fsMoveList').innerHTML = allSecteurs().filter(Boolean).map(function (x) { return '<option value="' + esc(x) + '">'; }).join('');
+}
+['fsPick', 'fsPeriod'].forEach(function (id) { $(id).addEventListener('change', renderMoveInfo); });
+$('fsMoveBox').addEventListener('toggle', renderMoveInfo);
+$('btnMoveSec').addEventListener('click', function () {
+  var name = $('fsMoveName').value.trim(); if (!name) { toast('Écris le nom du secteur.'); return; }
+  var list = selDoors(false), now = new Date().toISOString();
+  if (!list.length) { toast('Aucune porte sur cette sélection.'); return; }
+  list.forEach(function (d) { d.secteur = name; d.updatedAt = now; });
+  persist(); renderSecteurPick(); $('fsPick').value = 's:' + name; renderDayPick(); renderMoveInfo();
+  $('fsMoveName').value = ''; $('fsMoveBox').open = false;
+  toast(list.length + ' porte' + (list.length > 1 ? 's' : '') + ' rangée' + (list.length > 1 ? 's' : '') + ' dans « ' + name + ' »');
+});
+$('btnExportFiche').addEventListener('click', function () {
+  var period = $('fsPeriod').value, now = new Date(), day = period.indexOf('d:') === 0 ? period.slice(2) : null, tour = period.indexOf('t:') === 0 ? period.slice(2).split('-').map(Number) : null;
+  var pick = $('fsPick').value || ('s:' + curSecteur());
+  var list = selDoors(true).slice().sort(function (a, b) { return String(a.createdAt).localeCompare(String(b.createdAt)); });
   if (!list.length) { toast('Aucune porte sur cette période.'); return; }
   var secteur = pick === 'all' ? 'tous-secteurs' : pick.slice(2), atc = (S.settings.ficheAtc || '').trim();
   var rowsX = [], groups = {}, order = [];
