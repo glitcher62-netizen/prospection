@@ -311,6 +311,7 @@ nav.tabs button { position: relative; }
         <div><label class="f" for="fsPick">Fiche à exporter</label><select class="t" id="fsPick"></select></div>
         <div id="fsSplit" hidden class="card" style="gap:8px;background:#FFF7ED;border-color:#FDBA74"><div id="fsSplitText"></div><button class="btn primary" type="button" id="btnSplitCity">Ranger par ville</button></div>
         <div><label class="f" for="fsPeriod">Période</label><select class="t" id="fsPeriod"><option value="today">Aujourd’hui</option><option value="week">7 derniers jours</option><option value="month">30 derniers jours</option><option value="all">Tout</option></select></div>
+        <div id="fsDateBox" hidden><label class="f" for="fsDate">Date des portes</label><input class="t" type="date" id="fsDate"><div class="hint" id="fsDateInfo"></div></div>
         <label class="check"><input type="checkbox" id="fsSkipEmpty">Sans les absents où je n’ai rien noté</label>
         <label class="check"><input type="checkbox" id="fsContactsOnly">Seulement les portes avec un nom ou un téléphone</label>
         <button class="btn primary" type="button" id="btnExportFiche">Exporter la fiche de suivi</button>
@@ -1896,7 +1897,7 @@ function renderDayPick() {
         return '<option value="t:' + t.from + '-' + t.to + '">' + lab + ' · ' + t.label + ' ' + hm(t.from) + '–' + hm(t.to) + ' · ' + t.n + ' porte' + (t.n > 1 ? 's' : '') + (t.mates.length ? ' · avec ' + esc(t.mates.join(', ')) : ' · seul') + '</option>';
       }).join('') : '');
   }).join('');
-  el.innerHTML = '<option value="today">Aujourd’hui</option><option value="week">7 derniers jours</option><option value="month">30 derniers jours</option><option value="all">Tout</option>' +
+  el.innerHTML = '<option value="today">Aujourd’hui</option><option value="week">7 derniers jours</option><option value="month">30 derniers jours</option><option value="all">Tout</option><option value="pick">Choisir une date…</option>' +
     (opts ? '<optgroup label="Un jour précis">' + opts + '</optgroup>' : '');
   el.value = keep && el.querySelector('option[value="' + keep + '"]') ? keep : 'today';
 }
@@ -1930,8 +1931,26 @@ function hasNoted(d) { // un absent compte s'il y a quelque chose de vu ou d'éc
   return !!((d.roof || []).length || (d.tags || []).length || d.heat || String(d.note || '').trim() || (d.photos || []).length || hasContact(d));
 }
 (function () { var c = $('fsSkipEmpty'); c.checked = !!S.settings.skipEmpty; c.addEventListener('change', function () { S.settings.skipEmpty = c.checked; persist(); }); })();
+function curPeriod() { var v = $('fsPeriod').value; return v === 'pick' ? 'd:' + ($('fsDate').value || ymd(new Date())) : v; }
+function renderDateBox() {
+  var on = $('fsPeriod').value === 'pick'; $('fsDateBox').hidden = !on; if (!on) return;
+  if (!$('fsDate').value) $('fsDate').value = ymd(new Date());
+  $('fsDate').max = ymd(new Date());
+  var day = $('fsDate').value, per = {}, n = 0;
+  S.doors.forEach(function (d) { if (ymd(new Date(d.createdAt)) === day) { var k = secOf(d) || 'Sans secteur'; per[k] = (per[k] || 0) + 1; n++; } });
+  var keys = Object.keys(per);
+  $('fsDateInfo').textContent = n ? n + ' porte' + (n > 1 ? 's' : '') + ' ce jour-là : ' + keys.map(function (k) { return k + ' (' + per[k] + ')'; }).join(', ') : 'Aucune porte ce jour-là.';
+  var pick = $('fsPick').value;
+  if (n && pick !== 'all' && !per[pick.slice(2) || 'Sans secteur']) { // le secteur choisi n'a rien ce jour-là
+    if (keys.length === 1) $('fsPick').value = 's:' + (keys[0] === 'Sans secteur' ? '' : keys[0]);
+    else if ($('fsPick').querySelector('option[value="all"]')) $('fsPick').value = 'all';
+  }
+  if (typeof renderMoveInfo === 'function') renderMoveInfo();
+}
+$('fsPeriod').addEventListener('change', renderDateBox);
+$('fsDate').addEventListener('change', renderDateBox);
 function selDoors(withChecks) {
-  var period = $('fsPeriod').value, now = new Date(), from = null, day = period.indexOf('d:') === 0 ? period.slice(2) : null, tour = period.indexOf('t:') === 0 ? period.slice(2).split('-').map(Number) : null;
+  var period = curPeriod(), now = new Date(), from = null, day = period.indexOf('d:') === 0 ? period.slice(2) : null, tour = period.indexOf('t:') === 0 ? period.slice(2).split('-').map(Number) : null;
   if (period === 'today') from = ymd(now);
   else if (period === 'week' || period === 'month') { var f = new Date(); f.setDate(f.getDate() - (period === 'week' ? 6 : 29)); from = ymd(f); }
   var skipEmpty = withChecks && $('fsSkipEmpty').checked, onlyContacts = withChecks && $('fsContactsOnly').checked, pick = $('fsPick').value || ('s:' + curSecteur());
@@ -1961,7 +1980,7 @@ $('btnMoveSec').addEventListener('click', function () {
   toast(list.length + ' porte' + (list.length > 1 ? 's' : '') + ' rangée' + (list.length > 1 ? 's' : '') + ' dans « ' + name + ' »');
 });
 $('btnExportFiche').addEventListener('click', function () {
-  var period = $('fsPeriod').value, now = new Date(), day = period.indexOf('d:') === 0 ? period.slice(2) : null, tour = period.indexOf('t:') === 0 ? period.slice(2).split('-').map(Number) : null;
+  var period = curPeriod(), now = new Date(), day = period.indexOf('d:') === 0 ? period.slice(2) : null, tour = period.indexOf('t:') === 0 ? period.slice(2).split('-').map(Number) : null;
   var pick = $('fsPick').value || ('s:' + curSecteur());
   var list = selDoors(true).slice().sort(function (a, b) { return String(a.createdAt).localeCompare(String(b.createdAt)); });
   if (!list.length) { toast('Aucune porte sur cette période.'); return; }
